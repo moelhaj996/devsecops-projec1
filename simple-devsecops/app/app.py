@@ -1,7 +1,19 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 import os
+from security import SecurityMiddleware, setup_request_validation, sanitize_input
+from app.auth import auth_bp, login_required
 
 app = Flask(__name__)
+
+# Configure secret key for sessions
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+
+# Apply security middleware
+SecurityMiddleware(app)
+setup_request_validation(app)
+
+# Register blueprints
+app.register_blueprint(auth_bp)
 
 @app.route('/')
 def home():
@@ -12,6 +24,12 @@ def get_data():
     # Secure implementation - no sensitive data exposure
     return jsonify({"data": "This is secure data"})
 
+@app.route('/api/protected')
+@login_required
+def protected():
+    # This endpoint is only accessible to authenticated users
+    return jsonify({"message": f"Hello, {g.current_user}! This is protected data."})
+
 @app.route('/api/echo', methods=['POST'])
 def echo():
     # Input validation to prevent injection attacks
@@ -20,8 +38,7 @@ def echo():
         return jsonify({"error": "Invalid input"}), 400
     
     # Sanitize input to prevent XSS
-    message = data.get('message')
-    # In a real app, you would sanitize the input here
+    message = sanitize_input(data.get('message'))
     
     return jsonify({"echo": message})
 
